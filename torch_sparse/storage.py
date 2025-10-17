@@ -18,7 +18,7 @@ def get_layout(layout: Optional[str] = None) -> str:
     return layout
 
 
-@torch.jit.script
+# @torch.jit.script
 class SparseStorage(object):
     _row: Optional[torch.Tensor]
     _rowptr: Optional[torch.Tensor]
@@ -66,7 +66,7 @@ class SparseStorage(object):
             if rowptr is not None:
                 assert rowptr.numel() - 1 == M
             elif row is not None and row.numel() > 0:
-                assert trust_data or int(row.max()) < M
+                assert trust_data or row.max() < M
 
         N: int = 0
         if sparse_sizes is None or sparse_sizes[1] is None:
@@ -77,7 +77,7 @@ class SparseStorage(object):
             assert _N is not None
             N = _N
             if col.numel() > 0:
-                assert trust_data or int(col.max()) < N
+                assert trust_data or col.max() < N
 
         sparse_sizes = (M, N)
 
@@ -162,7 +162,7 @@ class SparseStorage(object):
                 self._csc2csr = None
 
     @classmethod
-    def empty(self):
+    def empty(cls):
         row = torch.tensor([], dtype=torch.long)
         col = torch.tensor([], dtype=torch.long)
         return SparseStorage(
@@ -622,35 +622,35 @@ class SparseStorage(object):
     def device_as(self, tensor: torch.Tensor, non_blocking: bool = False):
         return self.to_device(device=tensor.device, non_blocking=non_blocking)
 
-    def cuda(self):
-        new_col = self._col.cuda()
+    def musa(self):
+        new_col = self._col.musa()
         if new_col.device == self._col.device:
             return self
 
         row = self._row
         if row is not None:
-            row = row.cuda()
+            row = row.musa()
         rowptr = self._rowptr
         if rowptr is not None:
-            rowptr = rowptr.cuda()
+            rowptr = rowptr.musa()
         value = self._value
         if value is not None:
-            value = value.cuda()
+            value = value.musa()
         rowcount = self._rowcount
         if rowcount is not None:
-            rowcount = rowcount.cuda()
+            rowcount = rowcount.musa()
         colptr = self._colptr
         if colptr is not None:
-            colptr = colptr.cuda()
+            colptr = colptr.musa()
         colcount = self._colcount
         if colcount is not None:
-            colcount = colcount.cuda()
+            colcount = colcount.musa()
         csr2csc = self._csr2csc
         if csr2csc is not None:
-            csr2csc = csr2csc.cuda()
+            csr2csc = csr2csc.musa()
         csc2csr = self._csc2csr
         if csc2csr is not None:
-            csc2csr = csc2csr.cuda()
+            csc2csr = csc2csr.musa()
 
         return SparseStorage(
             row=row,

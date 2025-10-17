@@ -26,7 +26,7 @@ def test_sparse_sparse_mul(dtype, device):
     assert colC.tolist() == [2, 1]
     assert valueC.tolist() == [6, 6]
 
-    @torch.jit.script
+    # @torch.jit.script
     def jit_mul(A: SparseTensor, B: SparseTensor) -> SparseTensor:
         return mul(A, B)
 

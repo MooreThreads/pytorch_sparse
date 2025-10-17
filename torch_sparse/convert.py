@@ -13,7 +13,7 @@ def from_torch_sparse(A):
 
 
 def to_scipy(index, value, m, n):
-    assert not index.is_cuda and not value.is_cuda
+    assert not index.is_musa and not value.is_musa
     (row, col), data = index.detach(), value.detach()
     return scipy.sparse.coo_matrix((data, (row, col)), (m, n))
 

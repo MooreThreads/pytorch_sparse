@@ -1,8 +1,8 @@
-#include "convert_cuda.h"
+#include "convert_musa.h"
 
-#include <ATen/cuda/CUDAContext.h>
+#include <ATen/musa/MUSAContext.h>
 
-#include "utils.cuh"
+#include "utils.muh"
 
 #define THREADS 256
 
@@ -23,9 +23,9 @@ __global__ void ind2ptr_kernel(const int64_t *ind_data, int64_t *out_data,
   }
 }
 
-torch::Tensor ind2ptr_cuda(torch::Tensor ind, int64_t M) {
-  CHECK_CUDA(ind);
-  c10::cuda::MaybeSetDevice(ind.get_device());
+torch::Tensor ind2ptr_musa(torch::Tensor ind, int64_t M) {
+  CHECK_MUSA(ind);
+  c10::musa::MaybeSetDevice(ind.get_device());
 
   auto out = torch::empty({M + 1}, ind.options());
 
@@ -34,7 +34,7 @@ torch::Tensor ind2ptr_cuda(torch::Tensor ind, int64_t M) {
 
   auto ind_data = ind.data_ptr<int64_t>();
   auto out_data = out.data_ptr<int64_t>();
-  auto stream = at::cuda::getCurrentCUDAStream();
+  auto stream = at::musa::getCurrentMUSAStream();
   ind2ptr_kernel<<<(ind.numel() + 2 + THREADS - 1) / THREADS, THREADS, 0,
                    stream>>>(ind_data, out_data, M, ind.numel());
   return out;
@@ -53,14 +53,14 @@ __global__ void ptr2ind_kernel(const int64_t *ptr_data, int64_t *out_data,
   }
 }
 
-torch::Tensor ptr2ind_cuda(torch::Tensor ptr, int64_t E) {
-  CHECK_CUDA(ptr);
-  c10::cuda::MaybeSetDevice(ptr.get_device());
+torch::Tensor ptr2ind_musa(torch::Tensor ptr, int64_t E) {
+  CHECK_MUSA(ptr);
+  c10::musa::MaybeSetDevice(ptr.get_device());
 
   auto out = torch::empty({E}, ptr.options());
   auto ptr_data = ptr.data_ptr<int64_t>();
   auto out_data = out.data_ptr<int64_t>();
-  auto stream = at::cuda::getCurrentCUDAStream();
+  auto stream = at::musa::getCurrentMUSAStream();
   ptr2ind_kernel<<<(ptr.numel() - 1 + THREADS - 1) / THREADS, THREADS, 0,
                    stream>>>(ptr_data, out_data, E, ptr.numel() - 1);
   return out;

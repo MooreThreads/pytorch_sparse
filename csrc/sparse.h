@@ -4,10 +4,10 @@
 #include "macros.h"
 
 namespace sparse {
-SPARSE_API int64_t cuda_version() noexcept;
+SPARSE_API int64_t musa_version() noexcept;
 
 namespace detail {
-SPARSE_INLINE_VARIABLE int64_t _cuda_version = cuda_version();
+SPARSE_INLINE_VARIABLE int64_t _musa_version = musa_version();
 } // namespace detail
 } // namespace sparse
 

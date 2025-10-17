@@ -14,8 +14,8 @@ if version.parse(torch_scatter.__version__) > version.parse("2.0.9"):
     grad_dtypes.append(torch.bfloat16)
 
 devices = [torch.device('cpu')]
-if torch.cuda.is_available():
-    devices += [torch.device('cuda:0')]
+if torch.musa.is_available():
+    devices += [torch.device('musa:0')]
 
 
 def tensor(x: Any, dtype: torch.dtype, device: torch.device):

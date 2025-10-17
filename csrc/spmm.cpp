@@ -2,17 +2,18 @@
 #include <Python.h>
 #endif
 #include <torch/script.h>
+#include "torch_musa/csrc/aten/utils/Utils.h"
 
 #include "cpu/spmm_cpu.h"
 
-#ifdef WITH_CUDA
-#include "cuda/spmm_cuda.h"
+#ifdef WITH_MUSA
+#include "musa/spmm_musa.h"
 #endif
 
 #ifdef _WIN32
 #ifdef WITH_PYTHON
-#ifdef WITH_CUDA
-PyMODINIT_FUNC PyInit__spmm_cuda(void) { return NULL; }
+#ifdef WITH_MUSA
+PyMODINIT_FUNC PyInit__spmm_musa(void) { return NULL; }
 #else
 PyMODINIT_FUNC PyInit__spmm_cpu(void) { return NULL; }
 #endif
@@ -23,11 +24,11 @@ std::tuple<torch::Tensor, std::optional<torch::Tensor>>
 spmm_fw(torch::Tensor rowptr, torch::Tensor col,
         std::optional<torch::Tensor> optional_value, torch::Tensor mat,
         std::string reduce) {
-  if (rowptr.device().is_cuda()) {
-#ifdef WITH_CUDA
-    return spmm_cuda(rowptr, col, optional_value, mat, reduce);
+  if (at::musa::is_musa(rowptr)) {
+#ifdef WITH_MUSA
+    return spmm_musa(rowptr, col, optional_value, mat, reduce);
 #else
-    AT_ERROR("Not compiled with CUDA support");
+    AT_ERROR("Not compiled with MUSA support");
 #endif
   } else {
     return spmm_cpu(rowptr, col, optional_value, mat, reduce);
@@ -37,11 +38,11 @@ spmm_fw(torch::Tensor rowptr, torch::Tensor col,
 torch::Tensor spmm_value_bw(torch::Tensor row, torch::Tensor rowptr,
                             torch::Tensor col, torch::Tensor mat,
                             torch::Tensor grad, std::string reduce) {
-  if (row.device().is_cuda()) {
-#ifdef WITH_CUDA
-    return spmm_value_bw_cuda(row, rowptr, col, mat, grad, reduce);
+  if (at::musa::is_musa(row)) {
+#ifdef WITH_MUSA
+    return spmm_value_bw_musa(row, rowptr, col, mat, grad, reduce);
 #else
-    AT_ERROR("Not compiled with CUDA support");
+    AT_ERROR("Not compiled with MUSA support");
 #endif
   } else {
     return spmm_value_bw_cpu(row, rowptr, col, mat, grad, reduce);

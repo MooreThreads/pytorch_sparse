@@ -2,17 +2,18 @@
 #include <Python.h>
 #endif
 #include <torch/script.h>
+#include "torch_musa/csrc/aten/utils/Utils.h"
 
 #include "cpu/convert_cpu.h"
 
-#ifdef WITH_CUDA
-#include "cuda/convert_cuda.h"
+#ifdef WITH_MUSA
+#include "musa/convert_musa.h"
 #endif
 
 #ifdef _WIN32
 #ifdef WITH_PYTHON
-#ifdef WITH_CUDA
-PyMODINIT_FUNC PyInit__convert_cuda(void) { return NULL; }
+#ifdef WITH_MUSA
+PyMODINIT_FUNC PyInit__convert_musa(void) { return NULL; }
 #else
 PyMODINIT_FUNC PyInit__convert_cpu(void) { return NULL; }
 #endif
@@ -20,11 +21,11 @@ PyMODINIT_FUNC PyInit__convert_cpu(void) { return NULL; }
 #endif
 
 SPARSE_API torch::Tensor ind2ptr(torch::Tensor ind, int64_t M) {
-  if (ind.device().is_cuda()) {
-#ifdef WITH_CUDA
-    return ind2ptr_cuda(ind, M);
+  if (at::musa::is_musa(ind)) {
+#ifdef WITH_MUSA
+    return ind2ptr_musa(ind, M);
 #else
-    AT_ERROR("Not compiled with CUDA support");
+    AT_ERROR("Not compiled with MUSA support");
 #endif
   } else {
     return ind2ptr_cpu(ind, M);
@@ -32,11 +33,11 @@ SPARSE_API torch::Tensor ind2ptr(torch::Tensor ind, int64_t M) {
 }
 
 SPARSE_API torch::Tensor ptr2ind(torch::Tensor ptr, int64_t E) {
-  if (ptr.device().is_cuda()) {
-#ifdef WITH_CUDA
-    return ptr2ind_cuda(ptr, E);
+  if (at::musa::is_musa(ptr)) {
+#ifdef WITH_MUSA
+    return ptr2ind_musa(ptr, E);
 #else
-    AT_ERROR("Not compiled with CUDA support");
+    AT_ERROR("Not compiled with MUSA support");
 #endif
   } else {
     return ptr2ind_cpu(ptr, E);

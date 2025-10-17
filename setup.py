@@ -8,24 +8,23 @@ from itertools import product
 import torch
 from setuptools import find_packages, setup
 from torch.__config__ import parallel_info
-from torch.utils.cpp_extension import (
-    CUDA_HOME,
+from torch_musa.utils.musa_extension import (
+    MUSAExtension,
     BuildExtension,
-    CppExtension,
-    CUDAExtension,
+    MUSA_HOME,
 )
 
 __version__ = '0.6.18'
-URL = 'https://github.com/rusty1s/pytorch_sparse'
+URL = 'https://github.com/MooreThreads/pytorch_sparse'
 
-WITH_CUDA = False
-if torch.cuda.is_available():
-    WITH_CUDA = CUDA_HOME is not None or torch.version.hip
-suffices = ['cpu', 'cuda'] if WITH_CUDA else ['cpu']
-if os.getenv('FORCE_CUDA', '0') == '1':
-    suffices = ['cuda', 'cpu']
-if os.getenv('FORCE_ONLY_CUDA', '0') == '1':
-    suffices = ['cuda']
+WITH_MUSA = False
+if torch.musa.is_available():
+    WITH_MUSA = MUSA_HOME is not None or torch.version.hip
+suffices = ['cpu', 'musa'] if WITH_MUSA else ['cpu']
+if os.getenv('FORCE_MUSA', '0') == '1':
+    suffices = ['musa', 'cpu']
+if os.getenv('FORCE_ONLY_MUSA', '0') == '1':
+    suffices = ['musa']
 if os.getenv('FORCE_ONLY_CPU', '0') == '1':
     suffices = ['cpu']
 
@@ -45,7 +44,8 @@ def get_extensions():
     # remove generated 'hip' files, in case of rebuilds
     main_files = [path for path in main_files if 'hip' not in path]
 
-    for main, suffix in product(main_files, suffices):
+    # for main, suffix in product(main_files, suffices):
+    for main in main_files:
         define_macros = [('WITH_PYTHON', None)]
         undef_macros = []
 
@@ -87,19 +87,13 @@ def get_extensions():
             extra_compile_args['cxx'] += ['-arch', 'arm64']
             extra_link_args += ['-arch', 'arm64']
 
-        if suffix == 'cuda':
-            define_macros += [('WITH_CUDA', None)]
-            nvcc_flags = os.getenv('NVCC_FLAGS', '')
-            nvcc_flags = [] if nvcc_flags == '' else nvcc_flags.split(' ')
-            nvcc_flags += ['-O3']
-            if torch.version.hip:
-                # USE_ROCM was added to later versions of PyTorch
-                # Define here to support older PyTorch versions as well:
-                define_macros += [('USE_ROCM', None)]
-                undef_macros += ['__HIP_NO_HALF_CONVERSIONS__']
-            else:
-                nvcc_flags += ['--expt-relaxed-constexpr']
-            extra_compile_args['nvcc'] = nvcc_flags
+        # if suffix == 'musa':
+        if "musa" in suffices:
+            define_macros += [('WITH_MUSA', None)]
+            mcc_flags = os.getenv('MCC_FLAGS', '')
+            mcc_flags = [] if mcc_flags == '' else mcc_flags.split(' ')
+            mcc_flags += ['-O3']
+            extra_compile_args['mcc'] = mcc_flags
 
         name = main.split(os.sep)[-1][:-4]
         sources = [main]
@@ -108,15 +102,14 @@ def get_extensions():
         if osp.exists(path):
             sources += [path]
 
-        path = osp.join(extensions_dir, 'cuda', f'{name}_cuda.cu')
-        if suffix == 'cuda' and osp.exists(path):
+        path = osp.join(extensions_dir, 'musa', f'{name}_musa.mu')
+        if 'musa' in suffices and osp.exists(path):
             sources += [path]
 
         phmap_dir = osp.abspath("third_party/parallel-hashmap")
 
-        Extension = CppExtension if suffix == 'cpu' else CUDAExtension
-        extension = Extension(
-            f'torch_sparse._{name}_{suffix}',
+        extension = MUSAExtension(
+            f'torch_sparse._{name}',
             sources,
             include_dirs=[extensions_dir, phmap_dir],
             define_macros=define_macros,
@@ -141,7 +134,7 @@ test_requires = [
 
 # work-around hipify abs paths
 include_package_data = True
-if torch.cuda.is_available() and torch.version.hip:
+if torch.musa.is_available() and torch.version.hip:
     include_package_data = False
 
 setup(

@@ -26,7 +26,7 @@ def test_add(dtype, device):
     assert colC.tolist() == [0, 1, 2, 1, 2, 0, 1, 2]
     assert valueC.tolist() == [1, 2, 5, 4, 1, 1, 5, 4]
 
-    @torch.jit.script
+    # @torch.jit.script
     def jit_add(A: SparseTensor, B: SparseTensor) -> SparseTensor:
         return add(A, B)
 

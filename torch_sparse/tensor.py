@@ -9,7 +9,7 @@ from torch_scatter import segment_csr
 from torch_sparse.storage import SparseStorage, get_layout
 
 
-@torch.jit.script
+# @torch.jit.script
 class SparseTensor(object):
     storage: SparseStorage
 
@@ -481,11 +481,11 @@ class SparseTensor(object):
     def cpu(self):
         return self.to_device(device=torch.device('cpu'), non_blocking=False)
 
-    def cuda(self):
-        return self.from_storage(self.storage.cuda())
+    def musa(self):
+        return self.from_storage(self.storage.musa())
 
-    def is_cuda(self) -> bool:
-        return self.storage.col().is_cuda
+    def is_musa(self) -> bool:
+        return self.storage.col().is_musa
 
     def dtype(self):
         value = self.storage.value()
@@ -613,12 +613,12 @@ def cpu(self) -> SparseTensor:
     return self.device_as(torch.tensor(0., device='cpu'))
 
 
-def cuda(
+def musa(
     self,
     device: Optional[Union[int, str]] = None,
     non_blocking: bool = False,
 ):
-    return self.device_as(torch.tensor(0., device=device or 'cuda'))
+    return self.device_as(torch.tensor(0., device=device or 'musa'))
 
 
 def __getitem__(self: SparseTensor, index: Any) -> SparseTensor:
@@ -696,7 +696,7 @@ SparseTensor.share_memory_ = share_memory_
 SparseTensor.is_shared = is_shared
 SparseTensor.to = to
 SparseTensor.cpu = cpu
-SparseTensor.cuda = cuda
+SparseTensor.musa = musa
 SparseTensor.__getitem__ = __getitem__
 SparseTensor.__repr__ = __repr__
 

@@ -1,8 +1,8 @@
-#include "rw_cuda.h"
+#include "rw_musa.h"
 
-#include <ATen/cuda/CUDAContext.h>
+#include <ATen/musa/MUSAContext.h>
 
-#include "utils.cuh"
+#include "utils.muh"
 
 #define THREADS 1024
 #define BLOCKS(N) (N + THREADS - 1) / THREADS
@@ -28,12 +28,12 @@ __global__ void uniform_random_walk_kernel(const int64_t *rowptr,
   }
 }
 
-torch::Tensor random_walk_cuda(torch::Tensor rowptr, torch::Tensor col,
+torch::Tensor random_walk_musa(torch::Tensor rowptr, torch::Tensor col,
                                torch::Tensor start, int64_t walk_length) {
-  CHECK_CUDA(rowptr);
-  CHECK_CUDA(col);
-  CHECK_CUDA(start);
-  c10::cuda::MaybeSetDevice(rowptr.get_device());
+  CHECK_MUSA(rowptr);
+  CHECK_MUSA(col);
+  CHECK_MUSA(start);
+  c10::musa::MaybeSetDevice(rowptr.get_device());
 
   CHECK_INPUT(rowptr.dim() == 1);
   CHECK_INPUT(col.dim() == 1);
@@ -43,7 +43,7 @@ torch::Tensor random_walk_cuda(torch::Tensor rowptr, torch::Tensor col,
                           start.options().dtype(torch::kFloat));
   auto out = torch::full({walk_length + 1, start.size(0)}, -1, start.options());
 
-  auto stream = at::cuda::getCurrentCUDAStream();
+  auto stream = at::musa::getCurrentMUSAStream();
   uniform_random_walk_kernel<<<BLOCKS(start.numel()), THREADS, 0, stream>>>(
       rowptr.data_ptr<int64_t>(), col.data_ptr<int64_t>(),
       start.data_ptr<int64_t>(), rand.data_ptr<float>(),

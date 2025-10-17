@@ -1,11 +1,11 @@
-#include "spmm_cuda.h"
+#include "spmm_musa.h"
 
-#include <ATen/cuda/CUDAContext.h>
+#include <ATen/musa/MUSAContext.h>
 
-#include "reducer.cuh"
-#include "utils.cuh"
+#include "reducer.muh"
+#include "utils.muh"
 
-#define THREADS 256
+#define THREADS 512
 #define FULL_MASK 0xffffffff
 
 // Paper: Design Principles for Sparse Matrix Multiplication on the GPU
@@ -14,15 +14,22 @@ template <typename scalar_t, ReductionType REDUCE, bool HAS_VALUE>
 __global__ void spmm_kernel(const int64_t *rowptr_data, const int64_t *col_data,
                             const scalar_t *value_data,
                             const scalar_t *mat_data, scalar_t *out_data,
-                            int64_t *arg_out_data, int B, int M, int N, int K) {
+                            int64_t *arg_out_data, int B, int M, int N, int K,
+                            FastDivmod fdv) {
 
   // We ignore blockIdx.y here, because threads
   // across `blockIdx.y` are treated equally.
-  int thread_idx = blockDim.x * blockIdx.x + threadIdx.x;
+  // int thread_idx = blockDim.x * blockIdx.x + threadIdx.x;
+  uint32_t thread_idx = blockDim.x * blockIdx.x + threadIdx.x;
 
-  int row = thread_idx >> 5;            // thread_idx / 32
+  // int row = thread_idx >> 5;            // thread_idx / 32
   int lane_idx = thread_idx & (32 - 1); // thread_idx % 32
-  int batch_idx = row / M;
+  // int batch_idx = row / M;
+
+  uint32_t row = thread_idx >> 5;            // thread_idx / 32
+  uint32_t batch_idx, row_mod;
+
+  fdv(batch_idx, row_mod, row);
 
   // Compute the column index of `mat` in which the thread is operating.
   int mat_col_idx = lane_idx + (blockIdx.y << 5);
@@ -38,8 +45,10 @@ __global__ void spmm_kernel(const int64_t *rowptr_data, const int64_t *col_data,
   int leftover = K - (blockIdx.y << 5);
 
   if (batch_idx < B) {
-    int row_start = __ldg(rowptr_data + (row % M));
-    int row_end = __ldg(rowptr_data + (row % M) + 1);
+    // int row_start = __ldg(rowptr_data + (row % M));
+    // int row_end = __ldg(rowptr_data + (row % M) + 1);
+    int row_start = __ldg(rowptr_data + row_mod);
+    int row_end = __ldg(rowptr_data + row_mod + 1);
     int col_idx = row_start + lane_idx;
 
     scalar_t result = Reducer<scalar_t, REDUCE>::init();
@@ -51,11 +60,11 @@ __global__ void spmm_kernel(const int64_t *rowptr_data, const int64_t *col_data,
       if (col_idx < row_end) {
         // Coalesced memory access into `col` and `val`.
         mat_row = __ldg(col_data + col_idx) * K;
-        if (HAS_VALUE)
+        if constexpr (HAS_VALUE)
           val = __ldg(value_data + col_idx);
       } else {
         mat_row = -1;
-        if (HAS_VALUE)
+        if constexpr (HAS_VALUE)
           val = (scalar_t)0;
       }
       col_idx += 32;
@@ -64,7 +73,7 @@ __global__ void spmm_kernel(const int64_t *rowptr_data, const int64_t *col_data,
       for (int i = 0; i < 32; i++) {
         // Communication between all threads in a warp.
         mat_rows[i] = SHFL_SYNC(FULL_MASK, mat_row, i);
-        if (HAS_VALUE)
+        if constexpr (HAS_VALUE)
           vals[i] = SHFL_SYNC(FULL_MASK, val, i);
       }
 
@@ -73,7 +82,7 @@ __global__ void spmm_kernel(const int64_t *rowptr_data, const int64_t *col_data,
         if (lane_idx < leftover && mat_rows[i] != -1) {
           // Coalesced memory access into `mat`.
           val = __ldg(mat_data + batch_idx * N * K + mat_rows[i] + mat_col_idx);
-          if (HAS_VALUE)
+          if constexpr (HAS_VALUE)
             val = vals[i] * val;
           Reducer<scalar_t, REDUCE>::update(&result, val, &arg, c + i);
         }
@@ -90,16 +99,16 @@ __global__ void spmm_kernel(const int64_t *rowptr_data, const int64_t *col_data,
 }
 
 std::tuple<torch::Tensor, std::optional<torch::Tensor>>
-spmm_cuda(torch::Tensor rowptr, torch::Tensor col,
+spmm_musa(torch::Tensor rowptr, torch::Tensor col,
           std::optional<torch::Tensor> optional_value, torch::Tensor mat,
           std::string reduce) {
 
-  CHECK_CUDA(rowptr);
-  CHECK_CUDA(col);
+  CHECK_MUSA(rowptr);
+  CHECK_MUSA(col);
   if (optional_value.has_value())
-    CHECK_CUDA(optional_value.value());
-  CHECK_CUDA(mat);
-  c10::cuda::MaybeSetDevice(rowptr.get_device());
+    CHECK_MUSA(optional_value.value());
+  CHECK_MUSA(mat);
+  c10::musa::MaybeSetDevice(rowptr.get_device());
 
   CHECK_INPUT(rowptr.dim() == 1);
   CHECK_INPUT(col.dim() == 1);
@@ -131,22 +140,23 @@ spmm_cuda(torch::Tensor rowptr, torch::Tensor col,
   auto B = mat.numel() / (N * K);
   auto BLOCKS = dim3((32 * B * M + THREADS - 1) / THREADS, (K + 31) / 32);
 
-  auto stream = at::cuda::getCurrentCUDAStream();
+  auto stream = at::musa::getCurrentMUSAStream();
 
   AT_DISPATCH_ALL_TYPES_AND(at::ScalarType::Half, mat.scalar_type(), "_", [&] {
     auto mat_data = mat.data_ptr<scalar_t>();
     auto out_data = out.data_ptr<scalar_t>();
 
     AT_DISPATCH_REDUCTION_TYPES(reduce, [&] {
+      FastDivmod fast_divmod(M);
       if (optional_value.has_value()) {
         auto value_data = optional_value.value().data_ptr<scalar_t>();
         spmm_kernel<scalar_t, REDUCE, true><<<BLOCKS, THREADS, 0, stream>>>(
             rowptr_data, col_data, value_data, mat_data, out_data, arg_out_data,
-            B, M, N, K);
+            B, M, N, K, fast_divmod);
       } else {
         spmm_kernel<scalar_t, REDUCE, false><<<BLOCKS, THREADS, 0, stream>>>(
             rowptr_data, col_data, nullptr, mat_data, out_data, arg_out_data, B,
-            M, N, K);
+            M, N, K, fast_divmod);
       }
     });
   });
@@ -193,15 +203,15 @@ spmm_value_bw_kernel(const int64_t *row_data, const int64_t *rowptr_data,
   }
 }
 
-torch::Tensor spmm_value_bw_cuda(torch::Tensor row, torch::Tensor rowptr,
+torch::Tensor spmm_value_bw_musa(torch::Tensor row, torch::Tensor rowptr,
                                  torch::Tensor col, torch::Tensor mat,
                                  torch::Tensor grad, std::string reduce) {
-  CHECK_CUDA(row);
-  CHECK_CUDA(rowptr);
-  CHECK_CUDA(col);
-  CHECK_CUDA(mat);
-  CHECK_CUDA(grad);
-  c10::cuda::MaybeSetDevice(row.get_device());
+  CHECK_MUSA(row);
+  CHECK_MUSA(rowptr);
+  CHECK_MUSA(col);
+  CHECK_MUSA(mat);
+  CHECK_MUSA(grad);
+  c10::musa::MaybeSetDevice(row.get_device());
 
   mat = mat.contiguous();
   grad = grad.contiguous();
@@ -219,7 +229,7 @@ torch::Tensor spmm_value_bw_cuda(torch::Tensor row, torch::Tensor rowptr,
   auto rowptr_data = rowptr.data_ptr<int64_t>();
   auto col_data = col.data_ptr<int64_t>();
 
-  auto stream = at::cuda::getCurrentCUDAStream();
+  auto stream = at::musa::getCurrentMUSAStream();
 
   AT_DISPATCH_ALL_TYPES_AND(at::ScalarType::Half, mat.scalar_type(), "_", [&] {
     auto mat_data = mat.data_ptr<scalar_t>();

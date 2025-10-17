@@ -2,17 +2,18 @@
 #include <Python.h>
 #endif
 #include <torch/script.h>
+#include "torch_musa/csrc/aten/utils/Utils.h"
 
 #include "cpu/diag_cpu.h"
 
-#ifdef WITH_CUDA
-#include "cuda/diag_cuda.h"
+#ifdef WITH_MUSA
+#include "musa/diag_musa.h"
 #endif
 
 #ifdef _WIN32
 #ifdef WITH_PYTHON
-#ifdef WITH_CUDA
-PyMODINIT_FUNC PyInit__diag_cuda(void) { return NULL; }
+#ifdef WITH_MUSA
+PyMODINIT_FUNC PyInit__diag_musa(void) { return NULL; }
 #else
 PyMODINIT_FUNC PyInit__diag_cpu(void) { return NULL; }
 #endif
@@ -21,11 +22,11 @@ PyMODINIT_FUNC PyInit__diag_cpu(void) { return NULL; }
 
 SPARSE_API torch::Tensor non_diag_mask(torch::Tensor row, torch::Tensor col, int64_t M,
                             int64_t N, int64_t k) {
-  if (row.device().is_cuda()) {
-#ifdef WITH_CUDA
-    return non_diag_mask_cuda(row, col, M, N, k);
+  if (at::musa::is_musa(row)) {
+#ifdef WITH_MUSA
+    return non_diag_mask_musa(row, col, M, N, k);
 #else
-    AT_ERROR("Not compiled with CUDA support");
+    AT_ERROR("Not compiled with MUSA support");
 #endif
   } else {
     return non_diag_mask_cpu(row, col, M, N, k);

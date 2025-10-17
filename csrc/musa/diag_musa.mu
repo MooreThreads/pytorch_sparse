@@ -1,8 +1,8 @@
-#include "diag_cuda.h"
+#include "diag_musa.h"
 
-#include <ATen/cuda/CUDAContext.h>
+#include <ATen/musa/MUSAContext.h>
 
-#include "utils.cuh"
+#include "utils.muh"
 
 #define THREADS 1024
 
@@ -39,11 +39,11 @@ __global__ void non_diag_mask_kernel(const int64_t *row_data,
   }
 }
 
-torch::Tensor non_diag_mask_cuda(torch::Tensor row, torch::Tensor col,
+torch::Tensor non_diag_mask_musa(torch::Tensor row, torch::Tensor col,
                                  int64_t M, int64_t N, int64_t k) {
-  CHECK_CUDA(row);
-  CHECK_CUDA(col);
-  c10::cuda::MaybeSetDevice(row.get_device());
+  CHECK_MUSA(row);
+  CHECK_MUSA(col);
+  c10::musa::MaybeSetDevice(row.get_device());
 
   auto E = row.size(0);
   auto num_diag = k < 0 ? std::min(M + k, N) : std::min(M, N - k);
@@ -57,7 +57,7 @@ torch::Tensor non_diag_mask_cuda(torch::Tensor row, torch::Tensor col,
   if (E == 0)
     return mask;
 
-  auto stream = at::cuda::getCurrentCUDAStream();
+  auto stream = at::musa::getCurrentMUSAStream();
   non_diag_mask_kernel<<<(E + THREADS - 1) / THREADS, THREADS, 0, stream>>>(
       row_data, col_data, mask_data, N, k, num_diag, E);
 

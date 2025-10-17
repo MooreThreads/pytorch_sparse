@@ -7,8 +7,8 @@
 
 #ifdef _WIN32
 #ifdef WITH_PYTHON
-#ifdef WITH_CUDA
-PyMODINIT_FUNC PyInit__neighbor_sample_cuda(void) { return NULL; }
+#ifdef WITH_MUSA
+PyMODINIT_FUNC PyInit__neighbor_sample_musa(void) { return NULL; }
 #else
 PyMODINIT_FUNC PyInit__neighbor_sample_cpu(void) { return NULL; }
 #endif

@@ -2,17 +2,18 @@
 #include <Python.h>
 #endif
 #include <torch/script.h>
+#include "torch_musa/csrc/aten/utils/Utils.h"
 
 #include "cpu/rw_cpu.h"
 
-#ifdef WITH_CUDA
-#include "cuda/rw_cuda.h"
+#ifdef WITH_MUSA
+#include "musa/rw_musa.h"
 #endif
 
 #ifdef _WIN32
 #ifdef WITH_PYTHON
-#ifdef WITH_CUDA
-PyMODINIT_FUNC PyInit__rw_cuda(void) { return NULL; }
+#ifdef WITH_MUSA
+PyMODINIT_FUNC PyInit__rw_musa(void) { return NULL; }
 #else
 PyMODINIT_FUNC PyInit__rw_cpu(void) { return NULL; }
 #endif
@@ -21,11 +22,11 @@ PyMODINIT_FUNC PyInit__rw_cpu(void) { return NULL; }
 
 SPARSE_API torch::Tensor random_walk(torch::Tensor rowptr, torch::Tensor col,
                           torch::Tensor start, int64_t walk_length) {
-  if (rowptr.device().is_cuda()) {
-#ifdef WITH_CUDA
-    return random_walk_cuda(rowptr, col, start, walk_length);
+  if (at::musa::is_musa(rowptr)) {
+#ifdef WITH_MUSA
+    return random_walk_musa(rowptr, col, start, walk_length);
 #else
-    AT_ERROR("Not compiled with CUDA support");
+    AT_ERROR("Not compiled with MUSA support");
 #endif
   } else {
     return random_walk_cpu(rowptr, col, start, walk_length);
